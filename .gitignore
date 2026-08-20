@@ -1,0 +1,66 @@
+# ==========================================================================
+# Python / virtual environments
+# ==========================================================================
+venv/
+env/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+*.egg-info/
+
+# ==========================================================================
+# SECRETS - never commit these
+# ==========================================================================
+.env
+.env.*
+!.env.template
+config/config.private.yaml
+*token*
+Token.txt
+*.pem
+*.key
+
+# ==========================================================================
+# Data lake, models and logs - generated at runtime, not source code
+# ==========================================================================
+data/
+data_verify/
+models/
+models
+logs/
+logs
+*.parquet
+*.crc
+_SUCCESS
+
+# Spark / Hadoop local artefacts
+spark-warehouse/
+derby.log
+metastore_db/
+
+# Security scan output
+security/reports/
+bandit-report.json
+trivy-*.sarif
+
+# ==========================================================================
+# IDE / OS
+# ==========================================================================
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# ==========================================================================
+# Private notes - kept locally, not published
+# ==========================================================================
+docs/DEBUGGING_PLAYBOOK.md
+docs/private/
+NOTES.md
+
+# Local-only working folders (old conflicted copies contain dev secrets)
+_conflict_backup/
+_to_delete/

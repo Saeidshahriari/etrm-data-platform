@@ -1,0 +1,33 @@
+# ==========================================================================
+# ETRM Data Platform - non-secret configuration
+# Secrets (DB passwords, API keys) are NOT stored here. They live in Vault.
+# This file holds only safe, non-sensitive settings.
+# ==========================================================================
+
+project:
+  name: etrm-data-platform
+  description: End-to-end ETRM lakehouse (Bronze -> Silver -> Gold) on Airflow + Spark
+
+data_lake:
+  root: /opt/airflow/data      # overridden locally by the DATA_ROOT env var
+  bronze: 1_bronze
+  silver: 2_silver
+  gold: 3_gold
+
+spark:
+  master: spark://spark-master:7077
+  shuffle_partitions: 4
+
+market_data:
+  source: SMARD
+  series_id: 410               # Germany Day-Ahead spot price, hourly
+  country: DE
+
+trades:
+  default_count: 100
+  commodities: [POWER, NATURAL_GAS]
+
+# Benchmark prices (EUR/MWh) used when a commodity is missing from market data.
+benchmarks:
+  natural_gas_ttf: 42.50
+  power: 85.00

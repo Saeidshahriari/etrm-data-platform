@@ -1,0 +1,378 @@
+x-airflow-common:
+  &airflow-common
+  # Build the custom ETRM image (Airflow + Java 17 + PySpark 4 + project deps).
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: etrm-airflow:3.0.4
+  environment:
+    &airflow-common-env
+    AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+    AIRFLOW__CORE__AUTH_MANAGER: airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow_password@postgres-airflow/airflow_db
+    AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow_password@postgres-airflow/airflow_db
+    AIRFLOW__CELERY__BROKER_URL: redis://:@redis:6379/0
+    AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY:-}
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'false'
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: 'http://airflow-apiserver:8080/execution/'
+    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
+    AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW_JWT_SECRET:-please-change-me-in-env}
+    # Airflow 3 moved this from [webserver] to [api]. Using the old name still
+    # works but prints a deprecation warning on every start.
+    AIRFLOW__API__SECRET_KEY: ${AIRFLOW_JWT_SECRET:-please-change-me-in-env}
+    # --- Memory budget for a developer laptop -------------------------------
+    # Defaults assume a dedicated server. On an 8 GB machine the api-server's 4
+    # workers plus a 16-slot Celery worker exhaust RAM before the pipeline even
+    # starts, and the OOM killer then kills processes silently.
+    AIRFLOW__API__WORKERS: '1'
+    AIRFLOW__CELERY__WORKER_CONCURRENCY: '2'
+    AIRFLOW__SCHEDULER__PARSING_PROCESSES: '1'
+    # --- ETRM application configuration ---
+    # Spark connection used by SparkSubmitOperator (conn_id 'spark_default').
+    AIRFLOW_CONN_SPARK_DEFAULT: 'spark://spark-master:7077'
+    # Vault bootstrap (the only secrets read from the environment).
+    VAULT_ADDR: 'http://vault:8200'
+    VAULT_TOKEN: ${VAULT_TOKEN:-dev-root-token}
+    # Pin the interpreter on BOTH sides of Spark. The driver and the executors
+    # must run the same Python, or PySpark aborts with PYTHON_VERSION_MISMATCH.
+    PYSPARK_PYTHON: python3
+    PYSPARK_DRIVER_PYTHON: python3
+    # Data-lake root inside the containers, and Python import path.
+    DATA_ROOT: '/opt/airflow/data'
+    MODEL_DIR: '/opt/airflow/data/models'
+    PYTHONPATH: '/opt/airflow/src'
+    # MLflow tracking server for experiment tracking.
+    MLFLOW_TRACKING_URI: 'http://mlflow:5000'
+  volumes:
+    - ./dags:/opt/airflow/dags
+    - ./logs:/opt/airflow/logs
+    - ./config:/opt/airflow/config
+    - ./plugins:/opt/airflow/plugins
+    - ./src:/opt/airflow/src
+    - ./data:/opt/airflow/data
+  user: "${AIRFLOW_UID:-50000}:0"
+  depends_on:
+    &airflow-common-depends-on
+    redis:
+      condition: service_healthy
+    postgres-airflow:
+      condition: service_healthy
+
+services:
+  # ==========================================
+  # 1. INFRASTRUCTURE & BROKERS
+  # ==========================================
+  redis:
+    image: redis:7.2-alpine
+    container_name: etrm_redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: always
+
+  postgres-airflow:
+    image: postgres:16-alpine
+    container_name: airflow_postgres
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow_password
+      POSTGRES_DB: airflow_db
+    ports:
+      # Host port only, for connecting with an external tool (DBeaver, psql).
+      # The platform itself uses postgres-airflow:5432 on the Docker network.
+      # Avoid 5400-5599: Windows/Hyper-V reserves blocks there and Docker cannot
+      # bind them (check with: netsh interface ipv4 show excludedportrange protocol=tcp)
+      - "15434:5432"
+    volumes:
+      - airflow_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow -d airflow_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: always
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: etrm_postgres
+    environment:
+      POSTGRES_USER: ${DB_USER:-etrm_user}
+      POSTGRES_PASSWORD: ${DB_PASS:-etrm_password}
+      POSTGRES_DB: ${DB_NAME:-etrm_db}
+    ports:
+      # Host port only, for connecting with an external tool (DBeaver, psql).
+      # The pipeline uses postgres:5432 on the Docker network and ignores this.
+      # 5433 was moved to 15432: Windows reserves 5433-5532 for Hyper-V.
+      - "15432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-etrm_user} -d ${DB_NAME:-etrm_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: always
+
+  vault:
+    image: hashicorp/vault:latest
+    container_name: etrm_vault
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: ${VAULT_TOKEN:-dev-root-token}
+      VAULT_DEV_LISTEN_ADDRESS: "0.0.0.0:8200"
+    ports:
+      - "8200:8200"
+    cap_add:
+      - IPC_LOCK
+    restart: always
+
+  # Seed the ETRM secrets into Vault once it is up (runs and exits).
+  vault-init:
+    <<: *airflow-common
+    container_name: etrm_vault_init
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        echo "Waiting for Vault..."
+        sleep 8
+        python /opt/airflow/src/ingestion/vault_client.py
+    depends_on:
+      - vault
+    restart: "no"
+
+  # ==========================================
+  # 2. APACHE AIRFLOW 3 CORE SERVICES
+  # ==========================================
+  airflow-init:
+    <<: *airflow-common
+    container_name: airflow_init
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        mkdir -p /opt/airflow/{logs,dags,plugins,config}
+        chown -R "${AIRFLOW_UID:-50000}:0" /opt/airflow/
+        airflow db migrate
+        airflow users create --username admin --firstname Saeid --lastname Admin --role Admin --email admin@example.com --password ${AIRFLOW_ADMIN_PASSWORD:-admin} || true
+    environment:
+      <<: *airflow-common-env
+    user: "0:0"
+
+  airflow-apiserver:
+    <<: *airflow-common
+    container_name: airflow_apiserver
+    command: api-server
+    ports:
+      # Host port 18080, container port 8080.
+      # 8080 is one of the most contested ports on a developer machine; on this
+      # host another process already held 127.0.0.1:8080 and reset every
+      # connection. Only the HOST side moves: every service inside the platform
+      # still reaches the API at airflow-apiserver:8080 on the Docker network,
+      # so AIRFLOW__CORE__EXECUTION_API_SERVER_URL stays unchanged.
+      - "18080:8080"
+    mem_limit: 1g
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-scheduler:
+    <<: *airflow-common
+    container_name: airflow_scheduler
+    command: scheduler
+    mem_limit: 1g
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-dag-processor:
+    <<: *airflow-common
+    container_name: airflow_dag_processor
+    command: dag-processor
+    mem_limit: 768m
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-worker:
+    <<: *airflow-common
+    container_name: airflow_worker
+    command: celery worker
+    ports:
+      # Spark UI. In local mode the driver runs INSIDE this container, so the
+      # Spark UI (normally :4040) is published from here, not from spark-master.
+      # It is live only while a Spark job is running.
+      - "4040:4040"
+    environment:
+      <<: *airflow-common-env
+      DUMB_INIT_SETSID: "0"
+    # Hosts the Spark DRIVER as well as Celery, so it needs the most headroom.
+    mem_limit: 3g
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-apiserver:
+        condition: service_started
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-triggerer:
+    <<: *airflow-common
+    container_name: airflow_triggerer
+    command: triggerer
+    mem_limit: 512m
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  # ==========================================
+  # 3. APACHE SPARK 4 CLUSTER
+  # ==========================================
+  # The Spark cluster runs OUR image, not the stock apache/spark one.
+  #
+  # Why: spark-submit runs the driver inside the Airflow container (Python 3.12)
+  # while executors run here. The stock apache/spark:4.0.0 image ships Python
+  # 3.10, and PySpark refuses to run when driver and worker differ by even one
+  # minor version:
+  #   [PYTHON_VERSION_MISMATCH] Python in worker has different version: 3.10
+  #   than that in driver: 3.12
+  # Using one image for both guarantees identical Python, PySpark and libraries,
+  # which removes this whole class of bug instead of patching around it.
+  spark-master:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: etrm-airflow:3.0.4
+    container_name: spark_master
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - exec "$${SPARK_HOME}/bin/spark-class" org.apache.spark.deploy.master.Master --host spark-master
+    environment:
+      SPARK_NO_DAEMONIZE: "true"
+      PYSPARK_PYTHON: python3
+      # Spark asks the OS "who am I?" via Hadoop's UserGroupInformation. We
+      # override the image entrypoint, which skips the Airflow script that
+      # registers the running UID in /etc/passwd, so that lookup fails and the
+      # process dies. Naming the user explicitly short-circuits the lookup.
+      SPARK_USER: airflow
+      HADOOP_USER_NAME: airflow
+      SPARK_LOCAL_DIRS: /tmp/spark-local
+    ports:
+      - "8081:8080"
+      - "7077:7077"
+    volumes:
+      - ./src:/opt/airflow/src
+      - ./data:/opt/airflow/data
+    # Run as the SAME uid as the Airflow containers, so Spark owns the files it
+    # creates in the shared data volume and can chmod them. Hadoop's inability
+    # to resolve this uid in /etc/passwd is handled by SPARK_USER above.
+    user: "${AIRFLOW_UID:-50000}:0"
+    mem_limit: 768m
+    restart: always
+
+  spark-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: etrm-airflow:3.0.4
+    container_name: spark_worker
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - exec "$${SPARK_HOME}/bin/spark-class" org.apache.spark.deploy.worker.Worker spark://spark-master:7077
+    environment:
+      SPARK_NO_DAEMONIZE: "true"
+      PYSPARK_PYTHON: python3
+      SPARK_USER: airflow
+      HADOOP_USER_NAME: airflow
+      # Spark's worker creates a "work" directory for each application. By
+      # default that lives inside SPARK_HOME, which the image owns as UID 50000.
+      # We run as the Airflow UID (1000) so Spark can write the shared data
+      # volume - but then it cannot create that folder and dies on startup with
+      # Worker.createWorkDir -> Files.createDirectories FAILED.
+      # Pointing both scratch paths at /tmp resolves the conflict: writable by
+      # any uid, and container-local so nothing leaks onto the Windows mount.
+      SPARK_WORKER_DIR: /tmp/spark-work
+      SPARK_LOCAL_DIRS: /tmp/spark-local
+      # Without these, the worker advertises nearly all host RAM/cores to Spark.
+      SPARK_WORKER_MEMORY: 1g
+      SPARK_WORKER_CORES: '2'
+    volumes:
+      - ./src:/opt/airflow/src
+      - ./data:/opt/airflow/data
+    # Same uid as Airflow: Spark must own the files it writes.
+    user: "${AIRFLOW_UID:-50000}:0"
+    depends_on:
+      - spark-master
+    mem_limit: 1g
+    restart: always
+
+  # ==========================================
+  # 4. MLOps - EXPERIMENT TRACKING
+  # ==========================================
+  mlflow:
+    <<: *airflow-common
+    container_name: etrm_mlflow
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        mkdir -p /opt/airflow/data/mlflow
+        mlflow server \
+          --host 0.0.0.0 --port 5000 \
+          --workers 1 \
+          --backend-store-uri sqlite:////opt/airflow/data/mlflow/mlflow.db \
+          --default-artifact-root /opt/airflow/data/mlflow/artifacts
+    ports:
+      - "5000:5000"
+    # MLflow defaults to 4 gunicorn workers and was using 2.4 GB while idle;
+    # --workers 1 fixes that. But 512m was too tight even for one worker: the
+    # process needs ~1.1 GB of virtual memory and was OOM-killed in a loop
+    # every ~25s, burning CPU and RAM during every pipeline run.
+    mem_limit: 1g
+    restart: always
+    depends_on: []
+
+  # ==========================================
+  # 5. LIVE DASHBOARD
+  # ==========================================
+  dashboard:
+    <<: *airflow-common
+    container_name: etrm_dashboard
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        streamlit run /opt/airflow/dashboard/app.py \
+          --server.port=8501 \
+          --server.address=0.0.0.0 \
+          --server.headless=true \
+          --browser.gatherUsageStats=false
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./logs:/opt/airflow/logs
+      - ./config:/opt/airflow/config
+      - ./plugins:/opt/airflow/plugins
+      - ./src:/opt/airflow/src
+      - ./data:/opt/airflow/data
+      - ./dashboard:/opt/airflow/dashboard
+    mem_limit: 512m
+    restart: always
+    depends_on: []
+
+volumes:
+  postgres_data:
+  airflow_db_data:

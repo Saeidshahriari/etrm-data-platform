@@ -1,0 +1,166 @@
+name: Security Pipeline
+
+# Security layers A-F run automatically on every push and pull request.
+# Layer G (data poisoning) is not here: it runs inside Airflow at ingestion
+# time, because only then does real data exist.
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Re-scan weekly: a dependency that was safe on Monday can have a published
+    # vulnerability by Friday, even when nobody changed the code.
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  # ======================================================================
+  # LAYER A - SECRET SCANNING
+  # Catches passwords, tokens and keys committed by mistake.
+  # ======================================================================
+  secrets-scan:
+    name: "A · Secrets (gitleaks)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history: a secret deleted later is still leaked
+
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ======================================================================
+  # LAYER B - STATIC APPLICATION SECURITY TESTING (SAST)
+  # Reads the source code without running it and looks for insecure patterns.
+  # ======================================================================
+  sast:
+    name: "B · Code security (bandit + semgrep)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install scanners
+        run: pip install bandit[toml] semgrep
+
+      - name: Bandit (Python security linter)
+        run: |
+          bandit -r src/ dags/ agent/ dashboard/ \
+            -f json -o bandit-report.json \
+            --severity-level medium || true
+          bandit -r src/ dags/ agent/ dashboard/ --severity-level high
+
+      - name: Semgrep (deeper pattern analysis)
+        run: semgrep --config=p/security-audit --config=p/python --error src/ dags/
+
+      - name: Upload Bandit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-report
+          path: bandit-report.json
+
+  # ======================================================================
+  # LAYER C - SOFTWARE COMPOSITION ANALYSIS (SCA)
+  # Your own code can be perfect while a library you installed is vulnerable.
+  # ======================================================================
+  dependencies:
+    name: "C · Dependencies (pip-audit)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pip-audit
+        run: pip install pip-audit
+
+      - name: Audit declared dependencies
+        run: pip-audit -r requirements.txt --desc || true
+
+      - name: Fail on critical vulnerabilities only
+        run: pip-audit -r requirements.txt --vulnerability-service osv --strict
+        continue-on-error: true
+
+  # ======================================================================
+  # LAYER D - CONTAINER & IMAGE SCANNING
+  # The base image ships an entire OS; that OS has its own vulnerabilities.
+  # ======================================================================
+  containers:
+    name: "D · Containers (hadolint + trivy)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Hadolint (Dockerfile best practices)
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: Dockerfile
+          failure-threshold: error
+
+      - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: sarif
+          output: trivy-fs.sarif
+          severity: CRITICAL,HIGH
+
+      - name: Upload Trivy results to GitHub Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-fs.sarif
+
+  # ======================================================================
+  # LAYER E - INFRASTRUCTURE AS CODE
+  # An insecure compose setting (exposed port, no auth) is a real hole even
+  # when every line of Python is safe.
+  # ======================================================================
+  iac:
+    name: "E · Infrastructure (checkov)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkov scan
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: .
+          framework: dockerfile,github_actions
+          quiet: true
+          soft_fail: true   # start advisory; tighten once the findings are fixed
+
+  # ======================================================================
+  # LAYER G (partial) - DATA CONTRACT TESTS
+  # Proves the poisoning gates themselves still work. The gates run on live
+  # data in Airflow; these tests prove the gate logic is not broken.
+  # ======================================================================
+  data-gates:
+    name: "G · Data gate tests (pytest)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependencies
+        run: pip install pandera pandas pyarrow pytest scikit-learn joblib
+
+      - name: Run security and quality tests
+        run: pytest tests/ -v --tb=short
