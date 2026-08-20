@@ -1,0 +1,86 @@
+<mxfile host="app.diagrams.net" agent="ETRM Data Platform" version="24.7.0">
+  <diagram name="ETRM Data Platform" id="etrm-arch-1">
+    <mxGraphModel dx="1422" dy="820" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1500" pageHeight="1320" math="0" shadow="1">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- ORCHESTRATION -->
+        <mxCell id="airflow" value="&lt;b&gt;Apache Airflow 3&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#4b4b6a&quot; style=&quot;font-size:11px&quot;&gt;CeleryExecutor · schedules &amp;amp; secures every stage&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e0e7ff;strokeColor=#4f46e5;strokeWidth=2;fontColor=#312e81;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="140" y="70" width="1200" height="66" as="geometry" />
+        </mxCell>
+
+        <!-- LEFT: market data branch -->
+        <mxCell id="vault" value="&lt;b&gt;Vault&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#7a5c00&quot; style=&quot;font-size:11px&quot;&gt;KV v2 secrets&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fdf3d3;strokeColor=#d4a017;strokeWidth=2;fontColor=#7a5c00;" vertex="1" parent="1">
+          <mxGeometry x="60" y="250" width="150" height="78" as="geometry" />
+        </mxCell>
+        <mxCell id="smard" value="&lt;b&gt;SMARD API&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#475569&quot; style=&quot;font-size:11px&quot;&gt;German day-ahead power prices&lt;/font&gt;" style="shape=cloud;whiteSpace=wrap;html=1;fillColor=#dbeafe;strokeColor=#2563eb;strokeWidth=2;fontColor=#1e3a8a;" vertex="1" parent="1">
+          <mxGeometry x="250" y="205" width="255" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="ingest" value="&lt;b&gt;secure_ingest.py&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#0e7490&quot; style=&quot;font-size:11px&quot;&gt;fetch → scan → validate → land&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#cffafe;strokeColor=#0891b2;strokeWidth=2;fontColor=#155e75;" vertex="1" parent="1">
+          <mxGeometry x="250" y="350" width="255" height="78" as="geometry" />
+        </mxCell>
+        <mxCell id="bronze" value="&lt;b&gt;Bronze Lake&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#475569&quot; style=&quot;font-size:11px&quot;&gt;raw JSON · nothing ever lost&lt;/font&gt;" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;fillColor=#e2e8f0;strokeColor=#475569;strokeWidth=2;fontColor=#334155;" vertex="1" parent="1">
+          <mxGeometry x="270" y="488" width="215" height="86" as="geometry" />
+        </mxCell>
+
+        <!-- RIGHT: trade data branch -->
+        <mxCell id="gen" value="&lt;b&gt;Synthetic Trade Generator&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#6d28d9&quot; style=&quot;font-size:11px&quot;&gt;realistic trade book&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ede9fe;strokeColor=#7c3aed;strokeWidth=2;fontColor=#5b21b6;" vertex="1" parent="1">
+          <mxGeometry x="975" y="205" width="265" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="gentr" value="&lt;b&gt;generate_trades.py&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#0e7490&quot; style=&quot;font-size:11px&quot;&gt;init_db_and_insert_trades()&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#cffafe;strokeColor=#0891b2;strokeWidth=2;fontColor=#155e75;" vertex="1" parent="1">
+          <mxGeometry x="975" y="350" width="265" height="78" as="geometry" />
+        </mxCell>
+        <mxCell id="pg" value="&lt;b&gt;PostgreSQL (OLTP)&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#475569&quot; style=&quot;font-size:11px&quot;&gt;the live trade book&lt;/font&gt;" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;fillColor=#dbeafe;strokeColor=#336791;strokeWidth=2;fontColor=#1e3a5f;" vertex="1" parent="1">
+          <mxGeometry x="995" y="488" width="225" height="86" as="geometry" />
+        </mxCell>
+
+        <!-- MERGE: security gate + spark -->
+        <mxCell id="gate" value="&lt;b&gt;trade_security_gate — Layer G&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#b91c1c&quot; style=&quot;font-size:11px&quot;&gt;injection scan · schema/range · poisoning detection&lt;/font&gt;&lt;br&gt;&lt;font color=&quot;#b91c1c&quot; style=&quot;font-size:11px&quot;&gt;&lt;i&gt;quarantines bad rows — never crashes the run&lt;/i&gt;&lt;/font&gt;" style="shape=hexagon;perimeter=hexagonPerimeter2;whiteSpace=wrap;html=1;fillColor=#fee2e2;strokeColor=#dc2626;strokeWidth=2.5;fontColor=#7f1d1d;" vertex="1" parent="1">
+          <mxGeometry x="430" y="628" width="620" height="104" as="geometry" />
+        </mxCell>
+        <mxCell id="spark" value="&lt;b&gt;PySpark 4  ·  Bronze → Silver → Gold&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#4d7c0f&quot; style=&quot;font-size:11px&quot;&gt;raw payload → cleaned &amp;amp; typed → PnL, exposure, portfolio&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ecfccb;strokeColor=#65a30d;strokeWidth=2;fontColor=#3f6212;" vertex="1" parent="1">
+          <mxGeometry x="430" y="788" width="620" height="86" as="geometry" />
+        </mxCell>
+
+        <!-- ML -->
+        <mxCell id="iforest" value="&lt;b&gt;Isolation Forest&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#7e22ce&quot; style=&quot;font-size:11px&quot;&gt;surveillance model · flags trades, explains why&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f3e8ff;strokeColor=#9333ea;strokeWidth=2;fontColor=#6b21a8;" vertex="1" parent="1">
+          <mxGeometry x="355" y="928" width="345" height="88" as="geometry" />
+        </mxCell>
+        <mxCell id="mlflow" value="&lt;b&gt;MLflow&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#075985&quot; style=&quot;font-size:11px&quot;&gt;experiment tracking&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e0f2fe;strokeColor=#0194e2;strokeWidth=2;fontColor=#075985;" vertex="1" parent="1">
+          <mxGeometry x="800" y="928" width="230" height="88" as="geometry" />
+        </mxCell>
+
+        <!-- OUTPUTS -->
+        <mxCell id="dash" value="&lt;b&gt;Live Dashboard&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#1d4ed8&quot; style=&quot;font-size:11px&quot;&gt;Streamlit + Plotly · :8501&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dbeafe;strokeColor=#2563eb;strokeWidth=2;fontColor=#1e3a8a;" vertex="1" parent="1">
+          <mxGeometry x="250" y="1058" width="300" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="agent" value="&lt;b&gt;AI Agent&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#0f766e&quot; style=&quot;font-size:11px&quot;&gt;MCP + DuckDB · read-only queries only&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ccfbf1;strokeColor=#0d9488;strokeWidth=2;fontColor=#115e59;" vertex="1" parent="1">
+          <mxGeometry x="760" y="1058" width="300" height="80" as="geometry" />
+        </mxCell>
+
+        <!-- SECURITY BANNER -->
+        <mxCell id="sec" value="&lt;b&gt;Security, all the way down — seven layers wrap the whole platform&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#fecaca&quot; style=&quot;font-size:11px&quot;&gt;A secrets · B SAST · C SCA (deps) · D container · E IaC · F DAST (live) · G data poisoning&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#7f1d1d;strokeColor=#7f1d1d;fontColor=#ffffff;" vertex="1" parent="1">
+          <mxGeometry x="140" y="1182" width="1200" height="66" as="geometry" />
+        </mxCell>
+
+        <!-- ================= EDGES (flowAnimation=1) ================= -->
+        <mxCell id="e1" value="triggers" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;flowAnimation=1;strokeColor=#6366f1;strokeWidth=2.5;endArrow=block;fontColor=#475569;fontStyle=1;exitX=0.2;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="airflow" target="smard"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e2" value="triggers" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;flowAnimation=1;strokeColor=#6366f1;strokeWidth=2.5;endArrow=block;fontColor=#475569;fontStyle=1;exitX=0.8;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="airflow" target="gen"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e3" value="secrets" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;flowAnimation=1;strokeColor=#d4a017;strokeWidth=2.5;endArrow=block;fontColor=#7a5c00;fontStyle=1;" edge="1" parent="1" source="vault" target="ingest"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e4" value="prices" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;flowAnimation=1;strokeColor=#2563eb;strokeWidth=2.5;endArrow=block;fontColor=#475569;fontStyle=1;" edge="1" parent="1" source="smard" target="ingest"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e5" value="land" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;flowAnimation=1;strokeColor=#0891b2;strokeWidth=2.5;endArrow=block;fontColor=#475569;fontStyle=1;" edge="1" parent="1" source="ingest" target="bronze"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e6" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;flowAnimation=1;strokeColor=#7c3aed;strokeWidth=2.5;endArrow=block;" edge="1" parent="1" source="gen" target="gentr"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e7" value="insert" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;flowAnimation=1;strokeColor=#0891b2;strokeWidth=2.5;endArrow=block;fontColor=#475569;fontStyle=1;" edge="1" parent="1" source="gentr" target="pg"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e8" value="raw JSON" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;flowAnimation=1;strokeColor=#475569;strokeWidth=2.5;endArrow=block;fontColor=#475569;fontStyle=1;entryX=0.28;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="bronze" target="gate"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e9" value="trades" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;flowAnimation=1;strokeColor=#336791;strokeWidth=2.5;endArrow=block;fontColor=#475569;fontStyle=1;entryX=0.72;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="pg" target="gate"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e10" value="clean rows" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;flowAnimation=1;strokeColor=#dc2626;strokeWidth=2.5;endArrow=block;fontColor=#475569;fontStyle=1;" edge="1" parent="1" source="gate" target="spark"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e11" value="Gold" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;flowAnimation=1;strokeColor=#65a30d;strokeWidth=2.5;endArrow=block;fontColor=#475569;fontStyle=1;" edge="1" parent="1" source="spark" target="iforest"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e12" value="logs runs" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;flowAnimation=1;strokeColor=#0194e2;strokeWidth=2.5;endArrow=block;fontColor=#475569;fontStyle=1;" edge="1" parent="1" source="iforest" target="mlflow"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e13" value="scores + flags" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;flowAnimation=1;strokeColor=#9333ea;strokeWidth=2.5;endArrow=block;fontColor=#475569;fontStyle=1;exitX=0.25;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="iforest" target="dash"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e14" value="read-only" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;flowAnimation=1;strokeColor=#9333ea;strokeWidth=2.5;endArrow=block;fontColor=#475569;fontStyle=1;exitX=0.8;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="iforest" target="agent"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

@@ -26,6 +26,23 @@
 > the result to a **live dashboard** and an **AI agent** you can ask questions
 > in plain language.
 
+## Architecture
+
+![ETRM Data Platform architecture](docs/images/architecture.gif)
+
+<sub>
+A CDC-secured medallion lakehouse. <b>Airflow</b> schedules every stage; <b>Vault</b> supplies secrets; the
+<b>Layer&nbsp;G</b> security gate quarantines bad rows (it never crashes the run); <b>PySpark</b> builds
+Bronze&nbsp;→&nbsp;Silver&nbsp;→&nbsp;Gold; an <b>Isolation&nbsp;Forest</b> flags suspicious trades and explains why; and a
+<b>Streamlit</b> dashboard plus a read-only <b>AI agent</b> serve the results.
+<br><br>
+▶ <b><a href="https://htmlpreview.github.io/?https://github.com/Saeidshahriari/etrm-data-platform/blob/main/docs/etrm_architecture_animated.html">Interactive animated version</a></b>
+&nbsp;·&nbsp;
+✎ <b><a href="docs/etrm_architecture.drawio">Editable draw.io source</a></b>
+&nbsp;·&nbsp;
+🖼 <b><a href="docs/images/architecture.png">Static PNG</a></b>
+</sub>
+
 ```bash
 make up        # start the whole platform
 make pipeline  # run it end to end
@@ -36,6 +53,7 @@ make security  # run every security scan
 
 ## Table of Contents
 
+- [Architecture](#architecture)
 - [What this platform does](#what-this-platform-does)
 - [Stack and versions](#stack-and-versions)
 - [Repository layout](#repository-layout)

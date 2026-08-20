@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ETRM Data Platform — Animated Architecture</title>
+<style>
+  :root{
+    --bg:#f4f7fb; --panel:#ffffff; --ink:#0f172a; --muted:#64748b; --line:#e2e8f0;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);
+    font-family:"Segoe UI",system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif;}
+  .wrap{max-width:1180px;margin:0 auto;padding:28px 18px 48px;}
+  header{text-align:center;margin-bottom:10px;}
+  header h1{font-size:26px;margin:0 0 6px;letter-spacing:.2px;}
+  header p{margin:0;color:var(--muted);font-size:14px;}
+  .board{background:var(--panel);border:1px solid var(--line);border-radius:16px;
+    box-shadow:0 10px 30px rgba(15,23,42,.06);padding:10px 8px;margin-top:16px;overflow:hidden;}
+  svg{width:100%;height:auto;display:block;}
+  .legend{display:flex;flex-wrap:wrap;gap:14px 22px;justify-content:center;margin-top:16px;
+    color:var(--muted);font-size:12.5px;}
+  .legend span{display:inline-flex;align-items:center;gap:7px;}
+  .legend i{width:22px;height:0;border-top:3px dashed #94a3b8;display:inline-block;border-radius:2px;}
+  .foot{text-align:center;color:var(--muted);font-size:12px;margin-top:14px;}
+  .nodeTitle{font-weight:700;}
+  .nodeSub{fill:#64748b;}
+  text{font-family:"Segoe UI",system-ui,sans-serif;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>ETRM Data Platform</h1>
+    <p>A secured medallion lakehouse — European power prices in, ML surveillance and a live dashboard out. Watch the data flow.</p>
+  </header>
+
+  <div class="board">
+    <svg id="diagram" viewBox="0 0 1480 1290" role="img" aria-label="Animated ETRM data platform architecture"></svg>
+  </div>
+
+  <div class="legend">
+    <span><i style="border-top-color:#6366f1"></i> orchestration / triggers</span>
+    <span><i style="border-top-color:#d4a017"></i> secrets</span>
+    <span><i style="border-top-color:#2563eb"></i> data flow</span>
+    <span><i style="border-top-color:#dc2626"></i> security gate</span>
+    <span><i style="border-top-color:#7c3aed"></i> ML scores</span>
+  </div>
+  <p class="foot">Airflow schedules every stage · Layer G quarantines bad rows, never crashes the run · seven security layers (A–G) wrap the whole platform.</p>
+</div>
+
+<script>
+const SVG="http://www.w3.org/2000/svg";
+const svg=document.getElementById("diagram");
+
+/* ---------- stylized icon glyphs (drawn inside a 36x36 box) ---------- */
+function icon(key,c){
+  switch(key){
+    case "pinwheel": return `<g fill="${c}">
+      <path d="M18 18 L18 3 A15 15 0 0 1 31 10 Z" opacity=".95"/>
+      <path d="M18 18 L31 26 A15 15 0 0 1 17 33 Z" opacity=".72"/>
+      <path d="M18 18 L5 26 A15 15 0 0 1 5 10 Z" opacity=".55"/>
+      <circle cx="18" cy="18" r="3.2" fill="${c}"/></g>`;
+    case "cloud": return `<path d="M11 27 a7 7 0 0 1 1-14 a9 9 0 0 1 17 3 a6.5 6.5 0 0 1-1 11 z" fill="${c}"/>`;
+    case "lock": return `<g><rect x="9" y="17" width="18" height="14" rx="3" fill="${c}"/>
+      <path d="M12 17 v-4 a6 6 0 0 1 12 0 v4" fill="none" stroke="${c}" stroke-width="3"/>
+      <circle cx="18" cy="23" r="2.3" fill="#fff"/><rect x="17" y="24" width="2" height="4" fill="#fff"/></g>`;
+    case "shieldCheck": return `<g><path d="M18 4 l12 4 v8 c0 8-6 13-12 16 c-6-3-12-8-12-16 v-8 z" fill="${c}"/>
+      <path d="M12 18 l4 4 l8-9" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></g>`;
+    case "shieldAlert": return `<g><path d="M18 4 l12 4 v8 c0 8-6 13-12 16 c-6-3-12-8-12-16 v-8 z" fill="${c}"/>
+      <rect x="16.6" y="11" width="2.8" height="10" rx="1.4" fill="#fff"/><circle cx="18" cy="25" r="1.8" fill="#fff"/></g>`;
+    case "db": return `<g><path d="M8 9 c0-3.3 20-3.3 20 0 v18 c0 3.3-20 3.3-20 0 z" fill="${c}"/>
+      <ellipse cx="18" cy="9" rx="10" ry="3" fill="#fff" opacity=".45"/>
+      <path d="M8 16 c3 2.4 17 2.4 20 0 M8 22 c3 2.4 17 2.4 20 0" fill="none" stroke="#fff" stroke-width="1.4" opacity=".5"/></g>`;
+    case "gear": return `<g fill="none" stroke="${c}" stroke-width="3">
+      <circle cx="18" cy="18" r="7"/><circle cx="18" cy="18" r="2.4" stroke-width="2.4"/>
+      <g stroke-width="3" stroke-linecap="round">
+      <path d="M18 5 v3 M18 28 v3 M5 18 h3 M28 18 h3 M9 9 l2 2 M25 25 l2 2 M27 9 l-2 2 M11 25 l-2 2"/></g></g>`;
+    case "codeDoc": return `<g><rect x="10" y="5" width="16" height="26" rx="2.5" fill="${c}"/>
+      <path d="M15.5 15 l-3 3 l3 3 M20.5 15 l3 3 l-3 3" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>`;
+    case "spark": return `<path d="M18 3 l3.2 11.8 L33 18 l-11.8 3.2 L18 33 l-3.2-11.8 L3 18 l11.8-3.2 z" fill="${c}"/>`;
+    case "tree": return `<g fill="${c}"><path d="M18 4 l8 12 h-4.5 l6 9 h-17 l6-9 H12 z"/><rect x="16.2" y="24" width="3.6" height="8" rx="1"/></g>`;
+    case "flask": return `<g fill="none" stroke="${c}" stroke-width="3" stroke-linejoin="round">
+      <path d="M15 7 v7 l-6.5 13 a2.2 2.2 0 0 0 2 3.2 h15 a2.2 2.2 0 0 0 2-3.2 L21 14 V7"/>
+      <path d="M13 6 h10" stroke-linecap="round"/><path d="M12.5 22 h11" stroke-width="2.4"/></g>`;
+    case "bars": return `<g fill="${c}"><rect x="8" y="19" width="5" height="12" rx="1.2"/>
+      <rect x="15.5" y="12" width="5" height="19" rx="1.2"/><rect x="23" y="7" width="5" height="24" rx="1.2"/></g>`;
+    case "robot": return `<g fill="${c}"><rect x="8" y="13" width="20" height="15" rx="4"/>
+      <rect x="16.4" y="5.5" width="3.2" height="5" rx="1"/><circle cx="18" cy="5" r="2.2"/></g>
+      <circle cx="14.5" cy="20.5" r="2.1" fill="#fff"/><circle cx="21.5" cy="20.5" r="2.1" fill="#fff"/>`;
+    default: return "";
+  }
+}
+
+/* ---------- nodes ---------- */
+const nodes=[
+ {id:"airflow", x:140,y:70, w:1200,h:66, title:"Apache Airflow 3", sub:"CeleryExecutor · schedules & secures every stage", accent:"#4f46e5", tint:"#e0e7ff", icon:"pinwheel", wide:true},
+
+ {id:"vault", x:60, y:250,w:150,h:78, title:"Vault", sub:"KV v2 secrets", accent:"#d4a017", tint:"#fdf3d3", icon:"lock"},
+ {id:"smard", x:250,y:212,w:255,h:78, title:"SMARD API", sub:"German day-ahead power prices", accent:"#2563eb", tint:"#dbeafe", icon:"cloud"},
+ {id:"ingest",x:250,y:350,w:255,h:78, title:"secure_ingest.py", sub:"fetch → scan → validate → land", accent:"#0891b2", tint:"#cffafe", icon:"shieldCheck"},
+ {id:"bronze",x:250,y:488,w:255,h:78, title:"Bronze Lake", sub:"raw JSON · nothing ever lost", accent:"#475569", tint:"#e2e8f0", icon:"db"},
+
+ {id:"gen",   x:975,y:212,w:265,h:78, title:"Synthetic Trade Generator", sub:"realistic trade book", accent:"#7c3aed", tint:"#ede9fe", icon:"gear"},
+ {id:"gentr", x:975,y:350,w:265,h:78, title:"generate_trades.py", sub:"init_db_and_insert_trades()", accent:"#0891b2", tint:"#cffafe", icon:"codeDoc"},
+ {id:"pg",    x:975,y:488,w:265,h:78, title:"PostgreSQL (OLTP)", sub:"the live trade book", accent:"#336791", tint:"#dbeafe", icon:"db"},
+
+ {id:"gate",  x:430,y:636,w:620,h:96, title:"trade_security_gate — Layer G", sub:"injection scan · schema/range · poisoning detection · quarantines bad rows", accent:"#dc2626", tint:"#fee2e2", icon:"shieldAlert", wide:true},
+ {id:"spark", x:430,y:788,w:620,h:86, title:"PySpark 4  ·  Bronze → Silver → Gold", sub:"raw payload → cleaned & typed → PnL, exposure, portfolio", accent:"#65a30d", tint:"#ecfccb", icon:"spark", wide:true},
+
+ {id:"iforest",x:355,y:928,w:345,h:88, title:"Isolation Forest", sub:"surveillance model · flags trades, explains why", accent:"#9333ea", tint:"#f3e8ff", icon:"tree"},
+ {id:"mlflow", x:800,y:928,w:230,h:88, title:"MLflow", sub:"experiment tracking", accent:"#0194e2", tint:"#e0f2fe", icon:"flask"},
+
+ {id:"dash",  x:250,y:1058,w:300,h:80, title:"Live Dashboard", sub:"Streamlit + Plotly · :8501", accent:"#2563eb", tint:"#dbeafe", icon:"bars"},
+ {id:"agent", x:760,y:1058,w:300,h:80, title:"AI Agent", sub:"MCP + DuckDB · read-only", accent:"#0d9488", tint:"#ccfbf1", icon:"robot"},
+];
+const N={}; nodes.forEach(n=>N[n.id]=n);
+
+/* ---------- edges ---------- */
+const edges=[
+ {from:"airflow",to:"smard",  fromP:[377,136], toSide:"top",  color:"#6366f1", label:"triggers"},
+ {from:"airflow",to:"gen",    fromP:[1107,136],toSide:"top",  color:"#6366f1", label:"triggers"},
+ {from:"vault",  to:"ingest", fromSide:"right",toSide:"left", color:"#d4a017", label:"secrets"},
+ {from:"smard",  to:"ingest", fromSide:"bottom",toSide:"top", color:"#2563eb", label:"prices"},
+ {from:"ingest", to:"bronze", fromSide:"bottom",toSide:"top", color:"#0891b2", label:"land"},
+ {from:"gen",    to:"gentr",  fromSide:"bottom",toSide:"top", color:"#7c3aed", label:""},
+ {from:"gentr",  to:"pg",     fromSide:"bottom",toSide:"top", color:"#0891b2", label:"insert"},
+ {from:"bronze", to:"gate",   fromSide:"bottom",toP:[600,636],color:"#475569", label:"raw JSON"},
+ {from:"pg",     to:"gate",   fromSide:"bottom",toP:[880,636],color:"#336791", label:"trades"},
+ {from:"gate",   to:"spark",  fromSide:"bottom",toSide:"top", color:"#dc2626", label:"clean rows"},
+ {from:"spark",  to:"iforest",fromP:[680,874], toSide:"top",  color:"#65a30d", label:"Gold"},
+ {from:"iforest",to:"mlflow", fromSide:"right",toSide:"left", color:"#0194e2", label:"logs runs"},
+ {from:"iforest",to:"dash",   fromP:[430,1016],toSide:"top",  color:"#9333ea", label:"scores + flags"},
+ {from:"iforest",to:"agent",  fromP:[630,1016],toSide:"top",  color:"#9333ea", label:"read-only"},
+];
+
+/* ---------- helpers ---------- */
+function anchor(n,side){
+  if(side==="top") return [n.x+n.w/2, n.y];
+  if(side==="bottom") return [n.x+n.w/2, n.y+n.h];
+  if(side==="left") return [n.x, n.y+n.h/2];
+  return [n.x+n.w, n.y+n.h/2];
+}
+function normal(side){
+  return side==="top"?[0,-1]:side==="bottom"?[0,1]:side==="left"?[-1,0]:[1,0];
+}
+function el(tag,attrs){const e=document.createElementNS(SVG,tag);
+  for(const k in attrs)e.setAttribute(k,attrs[k]);return e;}
+
+/* soft drop shadow */
+const defs=el("defs",{});
+defs.innerHTML=`<filter id="sh" x="-20%" y="-20%" width="140%" height="140%">
+  <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#0f172a" flood-opacity="0.14"/></filter>`;
+svg.appendChild(defs);
+
+/* layer groups so edges sit under nodes, packets on top */
+const gEdges=el("g",{}); const gNodes=el("g",{}); const gPackets=el("g",{});
+svg.appendChild(gEdges); svg.appendChild(gNodes); svg.appendChild(gPackets);
+
+/* ---------- draw edges (base + flowing dash + moving packets) ---------- */
+let dashKey=0;
+edges.forEach(e=>{
+  const a=N[e.from], b=N[e.to];
+  const p0 = e.fromP ? e.fromP : anchor(a,e.fromSide);
+  const p1 = e.toP   ? e.toP   : anchor(b,e.toSide);
+  const d0 = e.fromP ? [0, p0[1]<b.y?1:-1] : normal(e.fromSide);
+  const d1 = e.toP   ? [0, p1[1]>a.y?-1:1] : normal(e.toSide);
+  const dist=Math.hypot(p1[0]-p0[0],p1[1]-p0[1]);
+  const k=Math.max(45,Math.min(150,dist*0.42));
+  const c0=[p0[0]+d0[0]*k, p0[1]+d0[1]*k];
+  const c1=[p1[0]+d1[0]*k, p1[1]+d1[1]*k];
+  const path=`M ${p0[0]} ${p0[1]} C ${c0[0]} ${c0[1]} ${c1[0]} ${c1[1]} ${p1[0]} ${p1[1]}`;
+
+  // base track
+  gEdges.appendChild(el("path",{d:path,fill:"none",stroke:"#e2e8f0",
+    "stroke-width":6,"stroke-linecap":"round"}));
+  // flowing dashed overlay
+  const flow=el("path",{d:path,fill:"none",stroke:e.color,"stroke-width":3.2,
+    "stroke-linecap":"round","stroke-dasharray":"9 12"});
+  const id="fp"+(dashKey++);
+  flow.setAttribute("id",id);
+  gEdges.appendChild(flow);
+  const anim=el("animate",{attributeName:"stroke-dashoffset",from:"42",to:"0",
+    dur:"1s",repeatCount:"indefinite"});
+  flow.appendChild(anim);
+
+  // arrow head
+  const [hx,hy]=p1, [tx,ty]=c1;
+  const ang=Math.atan2(hy-ty,hx-tx);
+  const s=8;
+  const ah=el("path",{d:`M ${hx} ${hy} L ${hx-s*Math.cos(ang-0.5)} ${hy-s*Math.sin(ang-0.5)} L ${hx-s*Math.cos(ang+0.5)} ${hy-s*Math.sin(ang+0.5)} Z`,
+    fill:e.color});
+  gEdges.appendChild(ah);
+
+  // moving packets (constant speed via path length)
+  const len=flow.getTotalLength();
+  const dur=Math.max(1.4,len/150);
+  for(let i=0;i<2;i++){
+    const dot=el("circle",{r:4.4,fill:e.color});
+    dot.setAttribute("filter","url(#sh)");
+    const m=el("animateMotion",{dur:dur+"s",repeatCount:"indefinite",
+      begin:(i*dur/2)+"s",rotate:"auto"});
+    const mp=el("mpath",{}); mp.setAttributeNS("http://www.w3.org/1999/xlink","href","#"+id);
+    m.appendChild(mp); dot.appendChild(m);
+    gPackets.appendChild(dot);
+  }
+
+  // label chip at midpoint
+  if(e.label){
+    const mid=flow.getPointAtLength(len*0.5);
+    const w=e.label.length*6.4+14;
+    gEdges.appendChild(el("rect",{x:mid.x-w/2,y:mid.y-10,width:w,height:20,rx:6,
+      fill:"#ffffff",stroke:"#e2e8f0"}));
+    const t=el("text",{x:mid.x,y:mid.y+4,"text-anchor":"middle","font-size":11.5,
+      fill:"#475569","font-weight":600}); t.textContent=e.label;
+    gEdges.appendChild(t);
+  }
+});
+
+/* ---------- draw nodes ---------- */
+nodes.forEach(n=>{
+  const g=el("g",{});
+  g.appendChild(el("rect",{x:n.x,y:n.y,width:n.w,height:n.h,rx:12,
+    fill:"#ffffff",stroke:n.accent,"stroke-width":2,filter:"url(#sh)"}));
+  // accent side bar
+  g.appendChild(el("rect",{x:n.x,y:n.y,width:6,height:n.h,rx:3,fill:n.accent}));
+  // icon tile
+  const iconX=n.x+18, iconY=n.y+n.h/2-22;
+  g.appendChild(el("rect",{x:iconX,y:iconY,width:44,height:44,rx:10,fill:n.tint}));
+  const ig=el("g",{transform:`translate(${iconX+4},${iconY+4}) scale(1)`});
+  ig.innerHTML=icon(n.icon,n.accent);
+  g.appendChild(ig);
+  // texts
+  const tx=n.x+78;
+  const title=el("text",{x:tx,y:n.y+n.h/2-3,"font-size":n.wide?17:15.5,
+    "font-weight":700,fill:"#0f172a"}); title.textContent=n.title;
+  g.appendChild(title);
+  const sub=el("text",{x:tx,y:n.y+n.h/2+16,"font-size":12.3,fill:"#64748b"});
+  sub.textContent=n.sub; g.appendChild(sub);
+  gNodes.appendChild(g);
+});
+
+/* ---------- security banner ---------- */
+const bg=el("g",{});
+bg.appendChild(el("rect",{x:140,y:1182,width:1200,height:64,rx:12,fill:"#7f1d1d"}));
+const bt=el("text",{x:740,y:1208,"text-anchor":"middle","font-size":15,
+  "font-weight":700,fill:"#ffffff"});
+bt.textContent="Security, all the way down — seven layers wrap the whole platform";
+bg.appendChild(bt);
+const bs=el("text",{x:740,y:1230,"text-anchor":"middle","font-size":12.3,fill:"#fecaca"});
+bs.textContent="A secrets · B SAST · C SCA (deps) · D container · E IaC · F DAST (live) · G data poisoning";
+bg.appendChild(bs);
+svg.appendChild(bg);
+</script>
+</body>
+</html>
